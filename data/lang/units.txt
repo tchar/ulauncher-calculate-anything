@@ -7,6 +7,15 @@
 @alias meter = m
 @alias kilometer = km
 
+@alias nanosecond = ns
+@alias microsecond = us = μs
+@alias millisecond = ms
+@alias minute = min
+@alias hour = h
+@alias day = d
+@alias month = m
+@alias year = y
+
 @alias picogram = pg
 @alias nanogram = ng
 @alias microgram = ug = μg
