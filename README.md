@@ -79,7 +79,7 @@ Open `Ulauncher` go to `Extensions` > `Add extension` and paste https://github.c
 
 ## Install for Albert
 
-Similarly to `Ulauncher` the same dependencies are are required.
+Similarly to `Ulauncher` the same dependencies are are required. Albert changed the way extensions work, so the `__init__.py` and the default install location had to be changed. I modified the bash install below to what they were changed to.
 
 To install the extension for Albert run
 ```bash
@@ -93,15 +93,17 @@ To install the extension for Albert run
 [ -z "$XDG_DATA_HOME" ] && INSTALL_DIR=~/.local/share || INSTALL_DIR=$XDG_DATA_HOME
 
 # Create module directory if not exists
-mkdir -p $INSTALL_DIR/albert/org.albert.extension.python/modules/
+mkdir -p $INSTALL_DIR/albert/python/plugins/modules/
+# Before this was set to $INSTALL_DIR/albert/org.albert.extension.python/modules/
 
 # Install extension
-git clone https://github.com/tchar/ulauncher-albert-calculate-anything $INSTALL_DIR/albert/org.albert.extension.python/modules/
+git clone https://github.com/tchar/ulauncher-albert-calculate-anything $INSTALL_DIR/albert/python/plugins/modules/
 ```
 
 Open albert, enable `Python` extensions and then enable the `Calculate Anything` extension.
 
 You can double click it to open module's location and edit `__init__.py` to add your preferences.
+You can also edit the preferences  directly in Albert's Plugin config window
 
 ## How to Setup
 
