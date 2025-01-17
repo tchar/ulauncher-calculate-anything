@@ -19,19 +19,26 @@ from albert import (
     runDetachedProcess,
     setClipboardText,
 )
+import re
 
 # Plugin metadata
 md_iid = "2.0"
 md_version = "0.1"
 md_name = "Calculate Anything"
 md_description = (
-    "A ULauncher/Albert extension that supports currency, units and date/time "
-    "conversion, as well as a calculator that supports complex numbers and functions."
+    "An Albert extension that calculates anything and converts currency, units and time."
 )
 md_license = "MIT"
 md_url = "https://github.com/tchar/ulauncher-albert-calculate-anything"
 md_authors = ["@tchar"]
-md_bin_dependencies = []
+md_lib_dependencies = [
+    "Pint",              # Pint package for unit conversion
+    "simpleeval",        # Evaluate simple mathematical expressions
+    "parsedatetime",     # Parse natural language dates
+    "pytz",              # Handle time zones
+    "babel",             # Optional, for translations and locale formatting
+]
+
 
 ################################### SETTINGS #######################################
 # The following defaults can be changed via the plugin's configWidget or by editing
@@ -40,17 +47,17 @@ md_bin_dependencies = []
 # Currency provider: one of ("internal", "fixerio")
 DEFAULT_CURRENCY_PROVIDER = "internal"
 # API key (for fixer.io or similar)
-DEFAULT_API_KEY = ""
+DEFAULT_API_KEY = "" #put your fixerio key here
 # Cache update interval (defaults to one day = 86400 seconds)
 DEFAULT_CACHE = 86400
 # Default currencies to show if no target is provided
-DEFAULT_CURRENCIES = "USD,EUR,GBP,CAD"
+DEFAULT_CURRENCIES = "USD,EUR,GBP,CAD, BRL"
 # Default cities to show when converting timezones
-DEFAULT_CITIES = "New York City US, London GB, Madrid ES, Vancouver CA, Athens GR"
+DEFAULT_CITIES = "New York City US, London GB, Madrid ES, Vancouver CA, Athens GR, São Paulo BR"
 # Units conversion mode ("normal" or "crazy")
 DEFAULT_UNITS_MODE = "normal"
 # Show placeholder if query is empty
-DEFAULT_SHOW_EMPTY_PLACEHOLDER = False
+DEFAULT_SHOW_EMPTY_PLACEHOLDER = True
 # Triggers (keywords that activate this extension)
 DEFAULT_TRIGGERS = ["=", "time", "dec", "bin", "hex", "oct"]
 ####################################################################################
@@ -126,12 +133,12 @@ class Plugin(PluginInstance, TriggerQueryHandler):
             self.readConfig("show_empty_placeholder", bool) or DEFAULT_SHOW_EMPTY_PLACEHOLDER
         )
 
-        # For convenience, store triggers in a property
-        stored_triggers = self.readConfig("triggers", str)
-        if stored_triggers:
-            self._triggers = [tr.strip() for tr in stored_triggers.split(",")]
-        else:
-            self._triggers = DEFAULT_TRIGGERS
+        self._triggerCalculator = self.readConfig("triggerCalculator", str) or "="
+        self._triggerTime = self.readConfig("triggerTime", str) or "time"
+        self._triggerHex = self.readConfig("triggerHex", str) or "hex"
+        self._triggerBinary = self.readConfig("triggerBinary", str) or "bin"
+        self._triggerDecimal = self.readConfig("triggerDecimal", str) or "dec"
+        self._triggerOctal = self.readConfig("triggerOctal", str) or "oct"
 
         # Initialize the "Calculate Anything" core preferences
         initialize_preferences(
@@ -210,135 +217,194 @@ class Plugin(PluginInstance, TriggerQueryHandler):
         self.writeConfig("show_empty_placeholder", value)
 
     @property
-    def triggers(self) -> list:
-        return self._triggers
+    def triggerCalculator(self):
+        return self._triggerCalculator
 
-    @triggers.setter
-    def triggers(self, value: list):
-        self._triggers = value
-        self.writeConfig("triggers", ",".join(value))
+    @triggerCalculator.setter
+    def triggerCalculator(self, value):
+        self._triggerCalculator = value.strip()
+        self.writeConfig("triggerCalculator", self._triggerCalculator)
 
+    @property
+    def triggerTime(self):
+        return self._triggerTime
+
+    @triggerTime.setter
+    def triggerTime(self, value):
+        self._triggerTime = value.strip()
+        self.writeConfig("triggerTime", self._triggerTime)
+
+    @property
+    def triggerHex(self):
+        return self._triggerHex
+
+    @triggerHex.setter
+    def triggerHex(self, value):
+        self._triggerHex = value.strip()
+        self.writeConfig("triggerHex", self._triggerHex)
+
+    @property
+    def triggerBinary(self):
+        return self._triggerBinary
+
+    @triggerBinary.setter
+    def triggerBinary(self, value):
+        self._triggerBinary = value.strip()
+        self.writeConfig("triggerBinary", self._triggerBinary)
+
+    @property
+    def triggerDecimal(self):
+        return self._triggerDecimal
+
+    @triggerDecimal.setter
+    def triggerDecimal(self, value):
+        self._triggerDecimal = value.strip()
+        self.writeConfig("triggerDecimal", self._triggerDecimal)
+
+    @property
+    def triggerOctal(self):
+        return self._triggerOctal
+
+    @triggerOctal.setter
+    def triggerOctal(self, value):
+        self._triggerOctal = value.strip()
+        self.writeConfig("triggerOctal", self._triggerOctal)
     #
     # Provide a config widget so users can modify settings via the Albert UI
     #
     def configWidget(self):
         return [
             {
-                "type": "groupbox",
-                "title": "Currency & Units Settings",
-                "children": [
-                    {
-                        "type": "lineedit",
-                        "property": "currencyProvider",
-                        "label": "Currency Provider (internal or fixerio)",
-                    },
-                    {
-                        "type": "lineedit",
-                        "property": "apiKey",
-                        "label": "API Key (for fixer.io or similar)",
-                    },
-                    {
-                        "type": "spinbox",
-                        "property": "cache",
-                        "label": "Cache Update Interval (seconds)",
-                        "widget_properties": {"min": 0, "max": 604800},  # up to 7 days
-                    },
-                    {
-                        "type": "lineedit",
-                        "property": "defaultCurrencies",
-                        "label": "Default Currencies",
-                    },
-                    {
-                        "type": "lineedit",
-                        "property": "defaultCities",
-                        "label": "Default Cities for Timezones",
-                    },
-                    {
-                        "type": "lineedit",
-                        "property": "unitsMode",
-                        "label": "Units Conversion Mode (normal or crazy)",
-                    },
-                ],
+                "type": "spinbox",
+                "property": "cache",
+                "label": "Cache Update Interval (seconds)",
+                "widget_properties": {"min": 0, "max": 604800},
             },
             {
-                "type": "groupbox",
-                "title": "Plugin Behavior",
-                "children": [
-                    {
-                        "type": "checkbox",
-                        "property": "showEmptyPlaceholder",
-                        "label": "Show placeholder if no query?",
-                    },
-                    {
-                        "type": "lineedit",
-                        "property": "triggers",
-                        "label": "Triggers (comma-separated, e.g., =, time, dec, bin, hex, oct)",
-                        "widget_properties": {
-                            "placeholderText": "Enter triggers separated by commas"
-                        },
-                    },
-                ],
+                "type": "lineedit",
+                "property": "currencyProvider",
+                "label": "Currency Provider (internal or fixerio)",
+            },
+            {
+                "type": "lineedit",
+                "property": "apiKey",
+                "label": "API Key (for fixer.io or similar)",
+            },
+            {
+                "type": "lineedit",
+                "property": "defaultCurrencies",
+                "label": "Default Currencies",
+            },
+            {
+                "type": "lineedit",
+                "property": "defaultCities",
+                "label": "Default Cities for Timezones",
+            },
+            {
+                "type": "lineedit",
+                "property": "unitsMode",
+                "label": "Units Conversion Mode (normal or crazy)",
+            },
+            {
+                "type": "checkbox",
+                "property": "showEmptyPlaceholder",
+                "label": "Show placeholder if no query?",
+            },
+            {
+                "type": "lineedit",
+                "property": "triggerCalculator",
+                "label": "Calculator Trigger (e.g., '=')",
+            },
+            {
+                "type": "lineedit",
+                "property": "triggerTime",
+                "label": "Time Conversion Trigger (e.g., 'time')",
+            },
+            {
+                "type": "lineedit",
+                "property": "triggerHex",
+                "label": "Hexadecimal Conversion Trigger (e.g., 'hex')",
+            },
+            {
+                "type": "lineedit",
+                "property": "triggerBinary",
+                "label": "Binary Conversion Trigger (e.g., 'bin')",
+            },
+            {
+                "type": "lineedit",
+                "property": "triggerDecimal",
+                "label": "Decimal Conversion Trigger (e.g., 'dec')",
+            },
+            {
+                "type": "lineedit",
+                "property": "triggerOctal",
+                "label": "Octal Conversion Trigger (e.g., 'oct')",
             },
         ]
 
-    #
-    # The main entry point for queries
-    #
+            #
+            # The main entry point for queries
+            #
     def handleTriggerQuery(self, query):
+
         # Because we set defaultTrigger to the first item in our triggers list,
         # the user typed something like "= 2+2" or "time 16:00" etc.
 
-        # We'll parse out which trigger (if any) matches what the user typed
-        user_input = query.string.strip()
+        user_input = query.string
 
-        # If user input is empty and we're not forced to show placeholders, return
         if not user_input and not self.showEmptyPlaceholder:
             return
 
-        # We'll call a function that tries each trigger. If none matches, we just
-        # check if we have no triggers at all, and handle accordingly.
+
         results = self.getCalculateAnythingResults(user_input)
         if results:
             query.add(results)
 
-    #
-    # Adapted from the original "handleGlobalQuery" in your script
-    #
+
     def getCalculateAnythingResults(self, user_input):
         """
         Return a list of StandardItems based on user_input, applying the logic
-        for each recognized trigger (calculator, time, base conversions, etc.).
+        for each specific trigger (calculator, time, base conversions, etc.).
+        Defaults to the calculator if no triggers are found or matched.
         """
-        # If there are no triggers, we use the standard "calculator" approach
-        if not self.triggers:
-            return self.buildResults(user_input, calculator_only=True)
 
-        # Try each recognized trigger in our list, in the order we have them:
-        # 0: '='
-        # 1: 'time'
-        # 2: 'dec'
-        # 3: 'bin'
-        # 4: 'hex'
-        # 5: 'oct'
-        # We'll parse them the same way the original script did.
-        for idx, trigger in enumerate(self.triggers):
-            # Ensure we have a trailing space. Example: "hex "
-            trigger_with_space = trigger + " "
-            if user_input.startswith(trigger_with_space):
-                query_nokw = user_input[len(trigger_with_space) :].strip()
-                return self.buildResults(query_nokw, trigger_mode=trigger.lower())
+        calc_pattern = re.compile(r"^\s*[\d\s\+\-\*\/\(\)\.\^\%sqrtlogexp]+$")
 
-        # If it doesn't match any known triggers but we do have triggers,
-        # just return an empty list or a placeholder if configured.
-        if self.showEmptyPlaceholder:
-            return self.buildPlaceholder("calculator", "")
-        return []
+        is_calc_input = bool(calc_pattern.match(user_input.strip()))
+        if is_calc_input:
+            trigger = ""
+            query_nokw = user_input.strip()
+        else:
+            tokens = user_input.split(None, 1)
+            trigger = tokens[0].lower() if tokens and tokens[0][0].isalpha() else ""
+            query_nokw = user_input.strip() if not trigger else (tokens[1] if len(tokens) > 1 else "")
+
+     
+        match trigger:
+            case t if t == self.triggerCalculator:
+                return self.buildResults(query_nokw, calculator_only=True)
+            case t if t == self.triggerTime:
+                return self.buildResults(query_nokw, trigger_mode="time")
+            case t if t == self.triggerHex:
+                return self.buildResults(query_nokw, trigger_mode="hex")
+            case t if t == self.triggerBinary:
+                return self.buildResults(query_nokw, trigger_mode="bin")
+            case t if t == self.triggerDecimal:
+                return self.buildResults(query_nokw, trigger_mode="dec")
+            case t if t == self.triggerOctal:
+                return self.buildResults(query_nokw, trigger_mode="oct")
+            case _:
+                return self.buildResults(query_nokw, calculator_only=True)
+
+
+
 
     def buildResults(self, query_string, calculator_only=False, trigger_mode=None):
         """
         Using the logic from the original script, build a list of StandardItems.
         """
         # If we're ignoring triggers, we handle everything with the calculator handlers
+
         if calculator_only:
             handlers = [UnitsQueryHandler, CalculatorQueryHandler, PercentagesQueryHandler]
             query_str = CalculatorQueryHandler().keyword + " " + query_string
@@ -377,7 +443,7 @@ class Plugin(PluginInstance, TriggerQueryHandler):
 
         items = []
         for idx, result in enumerate(results):
-            icon_path = result.icon or images_dir("icon.svg")
+            icon_path = result.icon or images_dir('icon.svg')
             icon_path = os.path.join(MAIN_DIR, icon_path)
 
             actions = []
@@ -399,6 +465,7 @@ class Plugin(PluginInstance, TriggerQueryHandler):
                     actions=actions,
                 )
             )
+            print(f"Added item {idx}: id={md_name}_{idx}, text={result.name}, subtext={result.description}, iconUrls={[icon_path]}, actions={actions}")
 
         # If no items and we need to show a placeholder, build it
         if not items and (query_string.strip() == "" or self.showEmptyPlaceholder):
@@ -407,6 +474,7 @@ class Plugin(PluginInstance, TriggerQueryHandler):
         return items
 
     def buildPlaceholder(self, mode, query_string):
+
         """
         Build a "no results" placeholder item, localized if possible.
         """
