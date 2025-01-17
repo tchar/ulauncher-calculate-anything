@@ -103,7 +103,7 @@ git clone https://github.com/tchar/ulauncher-albert-calculate-anything $INSTALL_
 Open albert, enable `Python` extensions and then enable the `Calculate Anything` extension.
 
 You can double click it to open module's location and edit `__init__.py` to add your preferences.
-You can also edit the preferences  directly in Albert's Plugin config window
+You can also edit the preferences  directly in Albert's Plugin config window.
 
 ## How to Setup
 
