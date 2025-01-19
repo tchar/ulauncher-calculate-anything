@@ -97,7 +97,7 @@ mkdir -p $INSTALL_DIR/albert/python/plugins/modules/
 # Before this was set to $INSTALL_DIR/albert/org.albert.extension.python/modules/
 
 # Install extension
-git clone https://github.com/tchar/ulauncher-albert-calculate-anything $INSTALL_DIR/albert/python/plugins/modules/
+git clone https://github.com/caiofiga/ulauncher-albert-calculate-anything $INSTALL_DIR/albert/python/plugins/modules/
 ```
 
 Open albert, enable `Python` extensions and then enable the `Calculate Anything` extension.
