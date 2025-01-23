@@ -219,4 +219,4 @@ def with_lock(func: Callable[..., RT]) -> Callable[..., RT]:
 
 @lru_cache(maxsize=20)
 def images_dir(*paths):
-    return os.path.join('calculate_anything', 'images', *paths)
+    return os.path.join('calculate_anything', "images", *paths)
